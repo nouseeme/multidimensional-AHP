@@ -8,10 +8,10 @@ const entities: Record<string, string> = {
 export const esc = (v: unknown): string =>
   String(v ?? '').replace(/[&<>"']/g, (c) => entities[c] ?? c);
 export const num = (v: number | null | undefined): string =>
-  v == null ? '—' : new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 }).format(v);
+  v == null ? '–' : new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 }).format(v);
 export const pct = (v: number): string => (v * 100).toFixed(1) + '%';
 export const score = (v: number | null): string =>
-  v == null ? '—' : v.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+  v == null ? '–' : v.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
 export const svg = (name: string): string => {
   const paths: Record<string, string> = {
     arrow: 'M5 12h14m-5-5 5 5-5 5',
@@ -24,6 +24,8 @@ export const svg = (name: string): string => {
     back: 'M19 12H5m5-5-5 5 5 5',
     up: 'M12 19V5m-5 5 5-5 5 5',
     down: 'M12 5v14m-5-5 5 5 5-5',
+    chevron: 'm6 9 6 6 6-6',
+    close: 'm6 6 12 12M18 6 6 18',
     info: 'M12 11v6M12 7v.01M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z',
   };
   return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.info}"/></svg>`;

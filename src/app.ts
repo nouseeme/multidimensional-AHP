@@ -26,6 +26,7 @@ function requiredElement<T extends HTMLElement = HTMLElement>(selector: string):
   return element;
 }
 const root = requiredElement('#app');
+const desktopSummary = window.matchMedia('(min-width: 72rem)');
 let p: Project = emptyProject(),
   result: DecisionResult | null = null,
   dirty = false;
@@ -49,17 +50,20 @@ try {
   if (stored) {
     p = stored;
     ui.save = 'Draft saved locally';
-    ui.notice = 'Your previous draft is ready to continue.';
   }
 } catch {
   ui.save = 'Local saving is unavailable. Export JSON to keep your work.';
+}
+
+function updateSaveStatus() {
+  document.querySelector('#save-label')?.replaceChildren(ui.save);
 }
 
 function update() {
   dirty = !!result;
   ui.error = '';
   ui.save = 'Saving draft…';
-  document.querySelector('#save-label')?.replaceChildren(ui.save);
+  updateSaveStatus();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try {
@@ -68,24 +72,32 @@ function update() {
     } catch {
       ui.save = 'Draft could not be saved. Export JSON to keep your work.';
     }
-    document.querySelector('#save-label')?.replaceChildren(document.createTextNode(ui.save));
+    updateSaveStatus();
   }, 300);
 }
 function rerenderSoon() {
   clearTimeout(renderTimer);
   renderTimer = setTimeout(render, 160);
 }
+function placeSummary() {
+  const popover = requiredElement('#decision-summary');
+  const host = desktopSummary.matches ? requiredElement('#summary-dock') : popover;
+  if (desktopSummary.matches) popover.hidePopover();
+  const sidebar = requiredElement('#sidebar');
+  if (sidebar.parentElement !== host) host.append(sidebar);
+}
 function render() {
   errorMap = ui.validating
     ? new Map(validate(p, ui.step > 1).map((issue) => [issue.field, issue.message]))
     : new Map();
-  const { criteriaPage, alternativesPage, reviewPage, resultsPage, sidebar } = createViews({
-    project: p,
-    result,
-    dirty,
-    ui,
-    errorMap,
-  });
+  const { criteriaPage, alternativesPage, reviewPage, resultsPage, sidebar, pageHeading } =
+    createViews({
+      project: p,
+      result,
+      dirty,
+      ui,
+      errorMap,
+    });
   const active = document.activeElement;
   const tableScroll = root.querySelector('.data-table')?.parentElement;
   const tableOffsets = tableScroll && [tableScroll.scrollLeft, tableScroll.scrollTop];
@@ -94,9 +106,44 @@ function render() {
   const input = active instanceof HTMLInputElement ? active : null;
   const start = input?.selectionStart,
     end = input?.selectionEnd;
-  const pages = [criteriaPage, alternativesPage, reviewPage, resultsPage],
-    labels = ['Criteria', 'Alternatives', 'Review', 'Results'];
-  root.innerHTML = `<header class="site-header"><div class="brand">${svg('chart')}<span>Decision Studio</span><span class="brand-divider"></span><span class="brand-sub">AHP + TOPSIS</span></div><div class="header-actions">${btn('Try supplier example', 'demo', 'ghost')}${btn('Import project', 'import', 'ghost')}${btn('Export JSON', 'export-project', 'ghost')}</div>${btn('New decision', 'new', 'secondary new-decision')}<input id="import-file" type="file" accept=".json,application/json" hidden></header><main class="workspace"><div class="workspace-bar"><div class="save-status" role="status" id="save-label">${esc(ui.save)}</div><nav class="steps" aria-label="Decision steps">${labels.map((label, i) => `<button data-action="step" data-step="${i + 1}" class="step ${ui.step === i + 1 ? 'active' : ''} ${ui.step > i + 1 ? 'complete' : ''}" ${ui.step === i + 1 ? 'aria-current="step"' : ''}><span class="step-number" aria-hidden="true">${ui.step > i + 1 ? svg('check') : i + 1}</span><span>${label}</span></button>`).join('')}</nav></div>${ui.error ? `<div class="hint error" role="alert">${svg('info')}<p>${esc(ui.error)}</p></div>` : ''}${ui.notice ? `<div class="notice" role="status">${esc(ui.notice)}${btn('Dismiss', 'dismiss', 'ghost small-button')}</div>` : ''}<div class="workspace-grid with-summary"><section class="main-content" aria-labelledby="step-heading">${pages[ui.step - 1]()}</section><aside id="sidebar" aria-label="Decision summary">${sidebar()}</aside></div><footer><span>Built on AHP Matrix Calculator · data stays on your device</span><a href="/docs/PRD-AHP-TOPSIS.md" target="_blank" rel="noopener">Product specification ↗</a></footer></main>`;
+  const pages = [criteriaPage, alternativesPage, reviewPage, resultsPage];
+  const summaryWasOpen = root.querySelector('#decision-summary:popover-open') !== null;
+  root.innerHTML = `
+    <header class="site-header">
+      <div class="brand">${svg('chart')}<div><strong>Decision Studio</strong><span>AHP + TOPSIS</span></div></div>
+      <button class="button project-trigger" id="project-trigger" type="button" popovertarget="project-actions">Project ${svg('chevron')}</button>
+      <div class="project-actions" id="project-actions" popover aria-label="Project actions">
+        ${btn('New decision', 'new', 'ghost')}
+        ${btn('Try supplier example', 'demo', 'ghost')}
+        ${btn('Import project', 'import', 'ghost')}
+        ${btn('Export JSON', 'export-project', 'ghost')}
+      </div>
+      <input id="import-file" type="file" accept=".json,application/json" hidden>
+    </header>
+    <main class="workspace">
+      <div class="step-progress">
+        <span id="progress-label">Step ${ui.step} of ${pages.length}</span>
+        <progress aria-labelledby="progress-label" max="${pages.length}" value="${ui.step}"></progress>
+      </div>
+      ${pageHeading()}
+      ${ui.error ? `<div class="hint error" role="alert">${svg('info')}<p>${esc(ui.error)}</p></div>` : ''}
+      ${ui.notice ? `<div class="notice" role="status">${esc(ui.notice)}${btn('Dismiss', 'dismiss', 'ghost small-button')}</div>` : ''}
+      <div class="workspace-content">
+        <section class="main-content" aria-labelledby="step-heading">${pages[ui.step - 1]()}</section>
+        <div id="summary-dock"></div>
+      </div>
+      <footer>
+        <span role="status" id="save-label">${esc(ui.save)}</span>
+        <a href="/docs/PRD-AHP-TOPSIS.md" target="_blank" rel="noopener">Product specification ↗</a>
+        <span>Built on AHP Matrix Calculator</span>
+      </footer>
+    </main>
+    <button class="button summary-trigger" id="summary-trigger" type="button" popovertarget="decision-summary">${svg('chart')} Decision summary</button>
+    <div id="decision-summary" popover>
+      <aside id="sidebar" aria-label="Decision summary">${sidebar()}</aside>
+    </div>`;
+  placeSummary();
+  if (summaryWasOpen && !desktopSummary.matches) requiredElement('#decision-summary').showPopover();
   const nextTableScroll = root.querySelector('.data-table')?.parentElement;
   if (tableOffsets && nextTableScroll) {
     [nextTableScroll.scrollLeft, nextTableScroll.scrollTop] = tableOffsets;
@@ -125,6 +172,7 @@ function render() {
   }
 }
 function focusStep() {
+  requiredElement('#decision-summary').hidePopover();
   requiredElement('#step-heading').focus({ preventScroll: true });
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
@@ -180,9 +228,9 @@ root.addEventListener('click', (e) => {
   if (!button || button.disabled) return;
   const action = button.dataset.action,
     id = button.dataset.id;
+  if (button.closest('#project-actions')) requiredElement('#project-actions').hidePopover();
   if (action === 'next') return go(ui.step + 1);
   if (action === 'back') return go(ui.step - 1);
-  if (action === 'step') return go(Number(button.dataset.step));
   if (action === 'to-review') return go(3);
   if (action === 'edit-inputs') return go(2);
   if (action === 'dismiss') {
@@ -269,11 +317,7 @@ root.addEventListener('click', (e) => {
       j = i + Number(button.dataset.delta);
     if (j < 0 || j >= p.criteria.length) return;
     [p.criteria[i], p.criteria[j]] = [p.criteria[j], p.criteria[i]];
-  } else if (action === 'direction')
-    criterionById(p, id).direction = isDirection(button.dataset.direction)
-      ? button.dataset.direction
-      : 'cost';
-  else if (action === 'add-alternative') {
+  } else if (action === 'add-alternative') {
     if (p.alternatives.length >= 100) return;
     let name = `Alternative ${p.alternatives.length + 1}`,
       k = p.alternatives.length + 1;
@@ -302,13 +346,15 @@ root.addEventListener('input', (e) => {
   else if (d.field === 'alternative-name') alternativeById(p, d.id).name = el.value;
   else if (d.field === 'value') alternativeById(p, d.a).values[criterionById(p, d.c).id] = el.value;
   else if (d.field === 'pair') {
-    const value = SCALE[16 - Number(el.value)];
+    const position = Number(el.value);
+    const value = SCALE[16 - position];
     setComparison(p, criterionById(p, d.a).id, criterionById(p, d.b).id, value);
     const a = criterionById(p, d.a),
       b = criterionById(p, d.b),
       text = preference(value, a, b);
     requiredElement(`#caption-${d.a}-${d.b}`).textContent = text;
     el.setAttribute('aria-valuetext', text);
+    el.parentElement?.style.setProperty('--position', `${(position / 16) * 100}%`);
     update();
     clearTimeout(previewTimer);
     previewTimer = setTimeout(() => {
@@ -351,7 +397,9 @@ root.addEventListener('change', async (e) => {
     }
     return;
   }
-  if (d.field === 'criterion-unit') {
+  if (d.field === 'criterion-direction' && isDirection(el.value)) {
+    criterionById(p, d.id).direction = el.value;
+  } else if (d.field === 'criterion-unit') {
     const c = criterionById(p, d.id);
     if (c.unit === el.value) return;
     const hasData = p.alternatives.some((a) => String(a.values[c.id] ?? '').trim());
@@ -393,4 +441,5 @@ root.addEventListener(
   },
   true,
 );
+desktopSummary.addEventListener('change', placeSummary);
 render();
