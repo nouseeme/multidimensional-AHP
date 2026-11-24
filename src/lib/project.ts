@@ -1,21 +1,29 @@
 import { METHOD, SCALE, TEMPLATES, isDirection, isTemplate } from './constants';
 import { parseNumber } from './numbers';
+import { translate, type Locale } from './i18n';
 import type { Alternative, Criterion, Matrix, Project, Template, ValidationIssue } from './types';
 
 export const uid = (): string => globalThis.crypto.randomUUID();
-export function criterion(template: Template = 'custom'): Criterion {
-  return { id: uid(), template, ...TEMPLATES[template] };
+export function criterion(template: Template = 'custom', locale: Locale = 'en'): Criterion {
+  const defaults = TEMPLATES[template];
+  return {
+    id: uid(),
+    template,
+    ...defaults,
+    name: translate(locale, defaults.name),
+    unit: template === 'price' && locale === 'tr' ? '₺' : translate(locale, defaults.unit),
+  };
 }
-export function emptyProject(): Project {
+export function emptyProject(locale: Locale = 'en'): Project {
   return {
     schemaVersion: 1,
     method: METHOD,
     numberFormat: 'decimal-point-no-grouping',
     title: '',
-    criteria: [criterion('price'), criterion('duration')],
+    criteria: [criterion('price', locale), criterion('duration', locale)],
     alternatives: [
-      { id: uid(), name: 'Alternative 1', values: {} },
-      { id: uid(), name: 'Alternative 2', values: {} },
+      { id: uid(), name: translate(locale, 'Alternative {number}', { number: 1 }), values: {} },
+      { id: uid(), name: translate(locale, 'Alternative {number}', { number: 2 }), values: {} },
     ],
     comparisons: {},
     touched: [],
@@ -88,11 +96,11 @@ export function validate(project: Project, requireData = true): ValidationIssue[
   }
   return issues;
 }
-export function demoProject(): Project {
-  const p = emptyProject();
-  p.title = 'Choose a delivery supplier';
-  p.alternatives[0].name = 'Supplier A';
-  p.alternatives[1].name = 'Supplier B';
+export function demoProject(locale: Locale = 'en'): Project {
+  const p = emptyProject(locale);
+  p.title = translate(locale, 'Choose a delivery supplier');
+  p.alternatives[0].name = translate(locale, 'Supplier A');
+  p.alternatives[1].name = translate(locale, 'Supplier B');
   [
     [100000, 10],
     [100100, 1],
@@ -116,7 +124,11 @@ function stringField(value: unknown, limit: number, message: string): string {
 }
 
 /** JSON is untrusted at runtime, even though the application itself is typed. */
-export function decodeProject(text: string, allowInvalidValues = false): Project {
+export function decodeProject(
+  text: string,
+  allowInvalidValues = false,
+  locale: Locale = 'en',
+): Project {
   let input: unknown;
   try {
     input = JSON.parse(text);
@@ -188,7 +200,9 @@ export function decodeProject(text: string, allowInvalidValues = false): Project
       if ((typeof value !== 'string' && typeof value !== 'number') || String(value).length > 200)
         throw new Error('Invalid numeric field.');
       if (!allowInvalidValues && String(value).trim() && !isValidCriterionValue(value, c))
-        throw new Error(`Invalid value in ${name}: ${c.name}.`);
+        throw new Error(
+          translate(locale, 'Invalid value in {name}: {criterion}.', { name, criterion: c.name }),
+        );
       values[c.id] = String(value);
     }
     return { id, name, values };

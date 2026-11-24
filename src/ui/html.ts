@@ -1,3 +1,5 @@
+import type { Locale } from '../lib/i18n';
+
 const entities: Record<string, string> = {
   '&': '&amp;',
   '<': '&lt;',
@@ -7,11 +9,29 @@ const entities: Record<string, string> = {
 };
 export const esc = (v: unknown): string =>
   String(v ?? '').replace(/[&<>"']/g, (c) => entities[c] ?? c);
-export const num = (v: number | null | undefined): string =>
-  v == null ? '–' : new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 }).format(v);
-export const pct = (v: number): string => (v * 100).toFixed(1) + '%';
-export const score = (v: number | null): string =>
-  v == null ? '–' : v.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+export function numberFormats(locale: Locale) {
+  const number = new Intl.NumberFormat(locale, { maximumSignificantDigits: 8 });
+  const percent = new Intl.NumberFormat(locale, {
+    style: 'percent',
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  const closeness = new Intl.NumberFormat(locale, { maximumFractionDigits: 8 });
+  const wholePercent = new Intl.NumberFormat(locale, { style: 'percent' });
+  const signedPercent = new Intl.NumberFormat(locale, { style: 'percent', signDisplay: 'always' });
+  const ratio = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
+  return {
+    num: (value: number | null | undefined) => (value == null ? '–' : number.format(value)),
+    pct: (value: number) => percent.format(value),
+    wholePct: (value: number) => wholePercent.format(value),
+    signedPct: (value: number) => signedPercent.format(value),
+    score: (value: number | null) => (value == null ? '–' : closeness.format(value)),
+    ratio: (value: number) => ratio.format(value),
+  };
+}
 export const svg = (name: string): string => {
   const paths: Record<string, string> = {
     arrow: 'M5 12h14m-5-5 5 5-5 5',

@@ -177,6 +177,8 @@ td,
   position: absolute;
   inset: 76px max(var(--gutter), calc((100vw - var(--shell-width)) / 2)) auto auto;
   width: min(13.5rem, calc(100vw - var(--gutter) * 2));
+  max-height: calc(100dvh - 84px);
+  overflow: auto;
   margin: 8px 0 0;
   padding: 6px;
   border: 1px solid var(--line);
@@ -197,6 +199,11 @@ td,
   min-height: 44px;
   justify-content: flex-start;
   text-align: left;
+}
+.locale-field {
+  margin: 6px 8px 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
 }
 .action-group {
   display: flex;
