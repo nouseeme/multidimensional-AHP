@@ -39,7 +39,7 @@ const ui: UIState = {
   validating: false,
   error: '',
   notice: '',
-  save: 'Draft saved locally',
+  save: 'Drafts save on this device',
   compare: [0, 1],
   sensitivity: false,
   details: false,
@@ -48,6 +48,7 @@ try {
   const stored = loadDraft(localStorage);
   if (stored) {
     p = stored;
+    ui.save = 'Draft saved locally';
     ui.notice = 'Your previous draft is ready to continue.';
   }
 } catch {
@@ -58,6 +59,7 @@ function update() {
   dirty = !!result;
   ui.error = '';
   ui.save = 'Saving draft…';
+  document.querySelector('#save-label')?.replaceChildren(ui.save);
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try {
@@ -85,13 +87,20 @@ function render() {
     errorMap,
   });
   const active = document.activeElement;
+  const tableScroll = root.querySelector('.data-table')?.parentElement;
+  const tableOffsets = tableScroll && [tableScroll.scrollLeft, tableScroll.scrollTop];
+  const activeButton = active instanceof HTMLButtonElement ? active : null;
   const id = active instanceof HTMLElement ? active.id : undefined;
   const input = active instanceof HTMLInputElement ? active : null;
   const start = input?.selectionStart,
     end = input?.selectionEnd;
   const pages = [criteriaPage, alternativesPage, reviewPage, resultsPage],
-    labels = ['Criteria & priorities', 'Alternatives', 'Review', 'Results'];
-  root.innerHTML = `<header class="site-header"><div class="brand">${svg('chart')}<span>Decision Studio</span><span class="brand-divider"></span><span class="brand-sub">AHP + TOPSIS</span></div><div class="header-actions">${btn('Try supplier example', 'demo', 'ghost')}${btn('Import project', 'import', 'ghost')}${btn('Export JSON', 'export-project', 'ghost')}${btn('New decision', 'new', 'secondary')}<input id="import-file" type="file" accept=".json,application/json" hidden></div></header><main class="workspace"><div class="intro"><div><div class="eyebrow">FROM PRIORITIES TO POSSIBILITIES</div><h1>A clearer way to choose.</h1><p>Compare the options. Keep your priorities in view.</p></div><div class="save-status"><span class="save-dot"></span><span id="save-label">${esc(ui.save)}</span></div></div><nav class="steps" aria-label="Decision steps">${labels.map((label, i) => `<button data-action="step" data-step="${i + 1}" class="step ${ui.step === i + 1 ? 'active' : ''} ${ui.step > i + 1 ? 'complete' : ''}" ${ui.step === i + 1 ? 'aria-current="step"' : ''}><span class="step-number">${ui.step > i + 1 ? svg('check') : i + 1}</span><span>${label}</span></button>`).join('')}</nav>${ui.error ? `<div class="hint error" role="alert">${svg('info')}<p>${esc(ui.error)}</p></div>` : ''}${ui.notice ? `<div class="notice" role="status">${esc(ui.notice)}${btn('Dismiss', 'dismiss', 'ghost small-button')}</div>` : ''}<div class="workspace-grid"><section class="main-content">${pages[ui.step - 1]()}</section><aside id="sidebar">${sidebar()}</aside></div><footer><span>Built on AHP Matrix Calculator · data stays on your device</span><a href="/docs/PRD-AHP-TOPSIS.md" target="_blank" rel="noopener">Product specification ↗</a></footer></main>`;
+    labels = ['Criteria', 'Alternatives', 'Review', 'Results'];
+  root.innerHTML = `<header class="site-header"><div class="brand">${svg('chart')}<span>Decision Studio</span><span class="brand-divider"></span><span class="brand-sub">AHP + TOPSIS</span></div><div class="header-actions">${btn('Try supplier example', 'demo', 'ghost')}${btn('Import project', 'import', 'ghost')}${btn('Export JSON', 'export-project', 'ghost')}</div>${btn('New decision', 'new', 'secondary new-decision')}<input id="import-file" type="file" accept=".json,application/json" hidden></header><main class="workspace"><div class="workspace-bar"><div class="save-status" role="status" id="save-label">${esc(ui.save)}</div><nav class="steps" aria-label="Decision steps">${labels.map((label, i) => `<button data-action="step" data-step="${i + 1}" class="step ${ui.step === i + 1 ? 'active' : ''} ${ui.step > i + 1 ? 'complete' : ''}" ${ui.step === i + 1 ? 'aria-current="step"' : ''}><span class="step-number" aria-hidden="true">${ui.step > i + 1 ? svg('check') : i + 1}</span><span>${label}</span></button>`).join('')}</nav></div>${ui.error ? `<div class="hint error" role="alert">${svg('info')}<p>${esc(ui.error)}</p></div>` : ''}${ui.notice ? `<div class="notice" role="status">${esc(ui.notice)}${btn('Dismiss', 'dismiss', 'ghost small-button')}</div>` : ''}<div class="workspace-grid with-summary"><section class="main-content" aria-labelledby="step-heading">${pages[ui.step - 1]()}</section><aside id="sidebar" aria-label="Decision summary">${sidebar()}</aside></div><footer><span>Built on AHP Matrix Calculator · data stays on your device</span><a href="/docs/PRD-AHP-TOPSIS.md" target="_blank" rel="noopener">Product specification ↗</a></footer></main>`;
+  const nextTableScroll = root.querySelector('.data-table')?.parentElement;
+  if (tableOffsets && nextTableScroll) {
+    [nextTableScroll.scrollLeft, nextTableScroll.scrollTop] = tableOffsets;
+  }
   if (id) {
     const el = document.getElementById(id);
     if (el) {
@@ -106,28 +115,41 @@ function render() {
           el.setSelectionRange(start, end ?? start);
         } catch {}
     }
+  } else if (activeButton?.dataset.action) {
+    const match = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-action]')).find(
+      (button) =>
+        !button.disabled &&
+        Object.entries(activeButton.dataset).every(([key, value]) => button.dataset[key] === value),
+    );
+    match?.focus({ preventScroll: true });
   }
+}
+function focusStep() {
+  requiredElement('#step-heading').focus({ preventScroll: true });
+  window.scrollTo({ top: 0, behavior: 'instant' });
 }
 function go(step: number) {
   ui.validating = true;
   const issues = step >= 2 ? validate(p, step >= 3) : [];
   if (issues.length) {
+    ui.step = validate(p, false).length ? 1 : 2;
     ui.error = `${issues.length} field${issues.length === 1 ? ' needs' : 's need'} attention. ${issues[0].message}`;
     render();
-    document.getElementById(issues[0].field)?.focus();
+    (document.getElementById(issues[0].field) ?? requiredElement('#step-heading')).focus();
     return;
   }
   if (step === 4 && !result) {
     ui.error = 'Calculate your decision from the review step first.';
     ui.step = 3;
     render();
+    focusStep();
     return;
   }
   ui.step = step;
   ui.validating = false;
   ui.error = '';
   render();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  focusStep();
 }
 function download(text: string, type: string, name: string) {
   const url = URL.createObjectURL(new Blob([text], { type }));
@@ -150,6 +172,7 @@ function reset(next: Project) {
   ui.details = false;
   update();
   render();
+  focusStep();
 }
 root.addEventListener('click', (e) => {
   if (!(e.target instanceof Element)) return;
@@ -218,7 +241,7 @@ root.addEventListener('click', (e) => {
       ui.error = '';
       ui.validating = false;
       render();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      focusStep();
     } catch (error) {
       ui.error = error instanceof Error ? error.message : String(error);
       render();
@@ -289,13 +312,17 @@ root.addEventListener('input', (e) => {
     update();
     clearTimeout(previewTimer);
     previewTimer = setTimeout(() => {
-      requiredElement('#sidebar').innerHTML = createViews({
+      const views = createViews({
         project: p,
         result,
         dirty,
         ui,
         errorMap,
-      }).sidebar();
+      });
+      const sidebar = document.querySelector('#sidebar');
+      const weights = document.querySelector('#comparison-weights');
+      if (sidebar) sidebar.innerHTML = views.sidebar();
+      if (weights) weights.innerHTML = views.weightSummary();
     }, 120);
     return;
   } else return;
@@ -351,8 +378,18 @@ root.addEventListener('change', async (e) => {
 root.addEventListener(
   'toggle',
   (e) => {
-    if (e.target instanceof HTMLDetailsElement && e.target.dataset.details === 'details')
-      ui.details = e.target.open;
+    if (!(e.target instanceof HTMLDetailsElement) || e.target.dataset.details !== 'details') return;
+    ui.details = e.target.open;
+    const details = e.target.querySelector('#calculation-details');
+    if (ui.details && details && !details.hasChildNodes()) {
+      details.innerHTML = createViews({
+        project: p,
+        result,
+        dirty,
+        ui,
+        errorMap,
+      }).calculationDetails();
+    }
   },
   true,
 );
